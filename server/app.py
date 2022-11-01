@@ -6,7 +6,7 @@ import sys
 import signal
 import uvicorn
 
-from interface.router.stream import router as stream_router
+from interface.router.streams import router as stream_router
 from interface.socket.server import Socket
 
 app = FastAPI()

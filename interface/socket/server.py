@@ -11,20 +11,9 @@ class Socket(Singleton):
         self.socket.bind((self.host, self.port))
         self.socket.listen()
 
-    def connect(self):
-        return Connection(self.socket)
+    def accept(self):
+        connection, address = self.socket.accept()
+        return connection, address
 
     def close(self):
         self.socket.close()
-
-
-class Connection:
-    def __init__(self, socket):
-        self.socket = socket
-
-    def __enter__(self):
-        self.connection, self.address = self.socket.accept()
-        return self.connection
-
-    def __exit__(self, type, value, traceback):
-        self.connection.close()
