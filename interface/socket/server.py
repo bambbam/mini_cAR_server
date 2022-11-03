@@ -20,7 +20,7 @@ class Socket(Singleton):
 
 
 class Connection:
-    def __init__(self, socket):
+    def __init__(self, socket : socket.socket):
         self.socket = socket
 
     def __enter__(self):
@@ -31,7 +31,7 @@ class Connection:
         self.connection.close()
 
 class Reader:
-    def __init__(self, client_socket):
+    def __init__(self, client_socket : socket.socket):
         self.client_socket = client_socket
         self.buffer = b""
         self.len_size = struct.calcsize("<L")
