@@ -39,7 +39,7 @@ class ReceiveCapFromClient(threading.Thread):
                         bin = reader.read() # read하는 로직이 길어서 Reader로 뺌
                         income = Income.parse_raw(pickle.loads(bin))
                         stream_db[income.car_id].append(bytes(income.jpgImg)) 
-                        if len(stream_db[income.car_id]) > 300:
+                        while len(stream_db[income.car_id]) > 300:
                             stream_db[income.car_id].popleft()
 
             except:
