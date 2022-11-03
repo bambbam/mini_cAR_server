@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 import threading
@@ -6,7 +7,13 @@ import pickle
 import threading
 from collections import deque
 
+import pydantic
+
 from interface.socket.server import Socket
+
+class Income(pydantic.BaseModel):
+    car_id : str
+    jpgImg : list
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
@@ -42,14 +49,9 @@ class ReceiveCapFromClient(threading.Thread):
 
                         bin = self.buffer[:bin_size]
                         self.buffer = self.buffer[bin_size:]
-
-                        car_idBin = bin[:32]
-                        jpgBin = bin[32:]
-
-                        car_id = car_idBin.decode("utf-8")
-                        jpgImg = pickle.loads(jpgBin)
-
-                        stream_db.append(jpgImg.tobytes())
+                        
+                        income = Income.parse_raw(pickle.loads(bin))
+                        stream_db.append(bytes(income.jpgImg))
                         if len(stream_db) > 300:
                             stream_db.popleft()
 
