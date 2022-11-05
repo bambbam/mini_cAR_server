@@ -7,6 +7,7 @@ import signal
 import uvicorn
 
 from interface.router.stream import router as stream_router
+from interface.router.car import router as car_router
 from interface.socket.server import Socket
 
 app = FastAPI()
@@ -26,7 +27,7 @@ app.add_middleware(
 
 
 app.include_router(stream_router)
-
+app.include_router(car_router)
 
 @app.get("/")
 async def root():

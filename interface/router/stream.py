@@ -7,6 +7,8 @@ import pickle
 import threading
 from collections import defaultdict, deque
 
+import asyncio
+
 import pydantic
 
 from interface.socket.server import Reader, Socket
@@ -25,36 +27,52 @@ class Income(pydantic.BaseModel):
 
 # 클라이언트가 보내는 데이터를 수신함
 # 멀티스레드 적용
-class ReceiveCapFromClient(threading.Thread):
-    def __init__(self, socket):
-        threading.Thread.__init__(self)
-        self.socket = socket
 
-    def run(self):
-        while True:
-            try:
-                with self.socket.connect() as client_socket:
-                    reader = Reader(client_socket) 
-                    while True:
-                        bin = reader.read() # read하는 로직이 길어서 Reader로 뺌
-                        income = Income.parse_raw(pickle.loads(bin))
-                        stream_db[income.car_id].append(bytes(income.jpgImg)) 
-                        while len(stream_db[income.car_id]) > 300:
-                            stream_db[income.car_id].popleft()
+async def handle(reader:asyncio.StreamReader, writer:asyncio.StreamWriter):
+    buffer = b""
+    len_size = struct.calcsize("<L")
+    while True:
+        while len(buffer) < len_size:
+            recved = await reader.read(4096)
+            buffer += recved
 
-            except:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="server is not watching",
-                )
+        packed_bin_size = buffer[: len_size]
+        buffer = buffer[len_size :]
+
+        bin_size = struct.unpack("<L", packed_bin_size)[0]
+
+        while len(buffer) < bin_size:
+            recved = await reader.read(4096)
+            buffer += recved
+
+        bin = buffer[:bin_size]
+        buffer = buffer[bin_size:]
+        
+        income = Income.parse_raw(pickle.loads(bin))
+        stream_db[income.car_id].append(bytes(income.jpgImg)) 
+        while len(stream_db[income.car_id]) > 300:
+            stream_db[income.car_id].popleft()
+
+
+
+async def f():
+    server = await asyncio.start_server(handle, "0.0.0.0",9999)
+    async with server:
+        await server.serve_forever()
+
+def start_async_server():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    asyncio.run(f())
+
+
+
 
 
 @router.on_event("startup")
 async def router_startup_event():
-    socket = Socket("0.0.0.0", 9999) # socket 서버라서 아마 쓰레드 여러개에 대해서 소켓 하나만 있으면 될거 같다는 의견
-    f = ReceiveCapFromClient(socket) 
-    f.start()
-
+    t = threading.Thread(target=start_async_server)
+    t.start()
 
 def get_camera_stream():
     while True:
