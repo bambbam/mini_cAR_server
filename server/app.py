@@ -8,13 +8,14 @@ import uvicorn
 
 from interface.router.stream import router as stream_router
 from interface.router.car import router as car_router
-from interface.socket.server import Socket
 
 app = FastAPI()
 
 origins = [
     "http://localhost",
     "http://localhost:4000",
+    "http://127.0.0.1",
+    "http://127.0.0.1:4000",
 ]
 
 app.add_middleware(
