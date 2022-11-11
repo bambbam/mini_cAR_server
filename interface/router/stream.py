@@ -8,20 +8,12 @@ import threading
 from collections import defaultdict, deque
 from interface.router.car import CarCache
 import asyncio
-from asyncio import Server
-
-import pydantic
 
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
 stream_db = defaultdict(lambda: deque(b"")) #여러개에 대해서 수신 가능하도록 변경
 DEFAULT_CAR_ID = "e208d83305274b1daa97e4465cb57c8b"
-
-# 클라이언트에게 들어오는 데이터 포맷
-class Income(pydantic.BaseModel):
-    car_id : str
-    jpgImg : list
 
 
 class Reader:
@@ -63,11 +55,16 @@ async def handle(reader:asyncio.StreamReader, writer:asyncio.StreamWriter):
         bin = await rio_reader.read()
         if bin is None:
             break
-        income = Income.parse_raw(pickle.loads(bin))
-        car_id = income.car_id
-        stream_db[income.car_id].append(bytes(income.jpgImg)) 
-        while len(stream_db[income.car_id]) > 300:
-            stream_db[income.car_id].popleft()
+        
+        car_idBin = bin[:32]
+        jpgBin = bin[32:]
+
+        car_id = car_idBin.decode("utf-8")
+        jpgImg = pickle.loads(jpgBin)
+
+        stream_db[car_id].append(bytes(jpgImg))
+        while len(stream_db[car_id]) > 300:
+            stream_db[car_id].popleft()
     
     del stream_db[car_id]
     writer.close()
