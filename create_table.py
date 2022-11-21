@@ -1,6 +1,14 @@
 from infrastructure.repository import base
 
-from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, Table, ForeignKeyConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    Table,
+    ForeignKeyConstraint,
+)
 from sqlalchemy.orm import relationship
 
 

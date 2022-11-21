@@ -39,6 +39,7 @@ def decode_token(token, secret_pre: TOKEN):
     except jwt.InvalidTokenError:
         return status.HTTP_401_UNAUTHORIZED
 
+
 def decode_token_without_exception(token, secret_pre: TOKEN):
     try:
         return jwt.decode(token, secret_pre.name, algorithms="HS256")
@@ -46,6 +47,7 @@ def decode_token_without_exception(token, secret_pre: TOKEN):
         return None
     except jwt.InvalidTokenError:
         return None
+
 
 oauth2_sheme = OAuth2PasswordBearer(tokenUrl="user/login")
 
@@ -56,6 +58,7 @@ def get_current_user(token: str = Depends(oauth2_sheme)):
     if token_check is status.HTTP_401_UNAUTHORIZED:
         raise HTTPException(status_code=token_check, detail=f"not authorized token")
     return token_check
+
 
 def get_current_user_with_null_return(token: str = Depends(oauth2_sheme)):
     try:

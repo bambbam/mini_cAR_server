@@ -29,6 +29,7 @@ boto3 = "^1.26.13"
 
 [tool.poetry.dev-dependencies]
 poethepoet = "^0.16.4"
+black = "^22.10.0"
 
 [build-system]
 requires = ["poetry-core"]

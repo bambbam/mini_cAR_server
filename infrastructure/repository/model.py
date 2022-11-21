@@ -8,6 +8,7 @@ from sqlalchemy.dialects.mysql.base import MSBinary
 from sqlalchemy.schema import Column
 import uuid
 
+
 class User(Base):
     __tablename__ = "user"
     id = Column(String(255), primary_key=True, default=str(uuid.uuid4))
