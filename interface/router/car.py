@@ -89,7 +89,7 @@ async def handle(reader:asyncio.StreamReader, writer:asyncio.StreamWriter):
         await writer.drain()
 
         bin = await rio_reader.read()
-        income = Message.parse_raw(pickle.loads(bin))
+        #income = Message.parse_raw(pickle.loads(bin))
         
         if bin==None:
             break

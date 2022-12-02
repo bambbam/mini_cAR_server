@@ -5,6 +5,7 @@ import threading
 import struct
 import pickle
 import threading
+import asyncio_dgram
 from collections import defaultdict, deque
 from interface.router.car import CarCache
 from infrastructure.repository.base import get_db
@@ -20,69 +21,40 @@ stream_db = defaultdict(lambda: deque(b""))  # 여러개에 대해서 수신 가
 DEFAULT_CAR_ID = "e208d83305274b1daa97e4465cb57c8b"
 
 
-class Reader:
-    def __init__(self, reader):
-        self.reader = reader
-        self.buffer = b""
-        self.len_size = struct.calcsize("<L")
-
-    async def read(self):
-        while len(self.buffer) < self.len_size:
-            recved = await self.reader.read(4096)
-            if len(recved) == 0:
-                return None
-            self.buffer += recved
-
-        packed_bin_size = self.buffer[: self.len_size]
-        self.buffer = self.buffer[self.len_size :]
-
-        bin_size = struct.unpack("<L", packed_bin_size)[0]
-
-        while len(self.buffer) < bin_size:
-            recved = await self.reader.read(4096)
-            if len(recved) == 0:
-                return None
-            self.buffer += recved
-
-        bin = self.buffer[:bin_size]
-        self.buffer = self.buffer[bin_size:]
-        return bin
 
 
-# 클라이언트가 보내는 데이터를 수신함
-# 멀티스레드 적용
-async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def async_server():
+    buffer = b""
+    len_size = struct.calcsize("<L")
 
-    car_id = None
-    rio_reader = Reader(reader)
+    stream = await asyncio_dgram.bind(("0.0.0.0", 9999))
+
     while True:
-        bin = await rio_reader.read()
-        if bin is None:
-            break
+        # iter 마다 하나의 datagram 수신
+        recved, remote_addr = await stream.recv()
 
-        car_idBin = bin[:32]
-        jpgBin = bin[32:]
+        # 받은 datagram이 car_id이면 패스
+        if len(recved) == 32:
+            car_id = recved.decode("utf-8")
+            continue
+        
+        # 받은 datagram이 jpgImg fragment이면 buffer에 저장
+        buffer += recved[1:]
 
-        car_id = car_idBin.decode("utf-8")
-        jpgImg = pickle.loads(jpgBin)
+        num_of_fragments = struct.unpack("B", recved[0:1])[0]
 
-        stream_db[car_id].append(bytes(jpgImg))
-        while len(stream_db[car_id]) > 300:
-            stream_db[car_id].popleft()
-
-    del stream_db[car_id]
-    writer.close()
+        # 받은 datagram이 마지막 fragment이면 그동안 buffer에 모은 bytes를 이미지로 바꾸고 buffer 비움
+        if num_of_fragments == 1:
+            jpgImg = pickle.loads(buffer)
+            stream_db[car_id].append(bytes(jpgImg))
+            while len(stream_db[car_id]) > 300:
+                stream_db[car_id].popleft()
+            buffer=b""
 
 
 def start_async_server():
-    async def start():
-        server = await asyncio.start_server(handle, "0.0.0.0", 9999)
-        async with server:
-            await server.serve_forever()
-
     loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    asyncio.run(start())
+    loop.run_until_complete(async_server())
 
 
 @router.on_event("startup")
@@ -110,3 +82,71 @@ async def stream_ws(websocket: WebSocket, user_id: str, db: Session = Depends(ge
     while True:
         await websocket.send_bytes(bytearray(stream_db[user.car_id][-1]))
         await asyncio.sleep(1 / 30)
+
+
+
+
+
+# class Reader:
+#     def __init__(self, reader):
+#         self.reader = reader
+#         self.buffer = b""
+#         self.len_size = struct.calcsize("<L")
+
+#     async def read(self):
+#         while len(self.buffer) < self.len_size:
+#             recved = await self.reader.read(4096)
+#             if len(recved) == 0:
+#                 return None
+#             self.buffer += recved
+
+#         packed_bin_size = self.buffer[: self.len_size]
+#         self.buffer = self.buffer[self.len_size :]
+
+#         bin_size = struct.unpack("<L", packed_bin_size)[0]
+
+#         while len(self.buffer) < bin_size:
+#             recved = await self.reader.read(4096)
+#             if len(recved) == 0:
+#                 return None
+#             self.buffer += recved
+
+#         bin = self.buffer[:bin_size]
+#         self.buffer = self.buffer[bin_size:]
+#         return bin
+
+
+# # 클라이언트가 보내는 데이터를 수신함
+# # 멀티스레드 적용
+# async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+
+#     car_id = None
+#     rio_reader = Reader(reader)
+#     while True:
+#         bin = await rio_reader.read()
+#         if bin is None:
+#             break
+
+#         car_idBin = bin[:32]
+#         jpgBin = bin[32:]
+
+#         car_id = car_idBin.decode("utf-8")
+#         jpgImg = pickle.loads(jpgBin)
+
+#         stream_db[car_id].append(bytes(jpgImg))
+#         while len(stream_db[car_id]) > 300:
+#             stream_db[car_id].popleft()
+
+#     del stream_db[car_id]
+#     writer.close()
+
+
+# def start_async_server():
+#     async def start():
+#         server = await asyncio.start_server(handle, "0.0.0.0", 9999)
+#         async with server:
+#             await server.serve_forever()
+
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     asyncio.run(start())
