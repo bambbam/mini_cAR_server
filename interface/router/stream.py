@@ -12,7 +12,7 @@ from infrastructure.repository.model import User
 
 from sqlalchemy.orm import Session
 import asyncio
-
+import config
 
 router = APIRouter(prefix="/stream", tags=["stream"])
 
@@ -102,11 +102,11 @@ def get_camera_stream(car_id):
 
 
 @router.websocket("/{user_id}/ws")
-async def stream_ws(websocket: WebSocket, user_id: str, db: Session = Depends(get_db)):
+async def stream_ws(websocket: WebSocket, user_id: str, db: Session = Depends(get_db), setting: config.Settings = Depends(config.get_settings)):
     await websocket.accept()
     await websocket.send_text("connected")
     user = db.query(User).filter(User.email == user_id).first()
     print(user.car_id)
     while True:
         await websocket.send_bytes(bytearray(stream_db[user.car_id][-1]))
-        await asyncio.sleep(1 / 30)
+        await asyncio.sleep(1 / setting.frame_rate)
