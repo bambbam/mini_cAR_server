@@ -9,6 +9,8 @@ import uvicorn
 from interface.router.stream import router as stream_router
 from interface.router.car import router as car_router
 from interface.router.user import router as user_router
+from interface.router.gallery import router as gallery_router
+
 
 app = FastAPI()
 
@@ -31,7 +33,7 @@ app.add_middleware(
 app.include_router(stream_router)
 app.include_router(car_router)
 app.include_router(user_router)
-
+app.include_router(gallery_router)
 
 @app.get("/")
 async def root():

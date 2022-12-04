@@ -14,7 +14,7 @@ router = APIRouter(prefix="/user", tags=["user"])
 
 
 @router.get("/")
-async def get_user(user: schemas.User = Depends(get_current_user)):
+async def get_user(user = Depends(get_current_user)):
     return user
 
 
@@ -28,12 +28,14 @@ async def create_user(user: CreateUser, db: Session = Depends(get_db)):
     is_exist_user = db.query(model.User).filter(model.User.email == user.email).first()
     if is_exist_user:
         raise HTTPException(status_code=400, detail="이미 존재하는 유저입니다.")
+
+    is_exist_car = db.query(model.Car).filter(model.Car.id == user.car_id).first()
+    if not is_exist_car:
+        raise HTTPException(status_code=400, detail="등록되지 않은 자동차입니다.")
+    
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
-    created_user = model.User(id=user.id, email=user.email, password=hashed_password)
-    created_car = model.Car(id=user.car_id)
-    created_user.car = created_car
+    created_user = model.User(id=user.id, email=user.email, password=hashed_password, car_id=user.car_id)
     db.add(created_user)
-    db.add(created_car)
     db.commit()
     return created_user
 
