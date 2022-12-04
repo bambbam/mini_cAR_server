@@ -6,12 +6,14 @@ from enum import Enum
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from base.singleton import Singleton
+
 from collections import defaultdict, deque
 
 from sqlalchemy.orm import Session
 from infrastructure.repository.base import get_db
 from infrastructure.repository import schemas, model
 from interface.router.auth import get_current_user
+
 
 
 router = APIRouter(prefix="/car", tags=["car"])
