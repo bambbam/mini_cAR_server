@@ -1,7 +1,7 @@
 from signal import signal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 import sys
 import signal
 import uvicorn

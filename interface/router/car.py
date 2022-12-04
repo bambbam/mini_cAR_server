@@ -6,7 +6,6 @@ from enum import Enum
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from base.singleton import Singleton
-from collections import defaultdict, deque
 router = APIRouter(prefix="/car", tags=["car"])
 
 DEFAULT_CAR_ID = "e208d83305274b1daa97e4465cb57c8b"
