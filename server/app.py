@@ -55,4 +55,4 @@ async def startup_event():
 
 
 def main():
-    uvicorn.run("server.app:app", reload=True)
+    uvicorn.run("server.app:app", reload=True, host="0.0.0.0")

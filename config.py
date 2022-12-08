@@ -15,7 +15,12 @@ class Settings(BaseSettings):
     prod_db_url : str
 
     frame_rate : int = 30
-
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_bucket_name: str
+    fps: int
+    width: int
+    height: int
     class Config:
         env_file = ".env"
 
