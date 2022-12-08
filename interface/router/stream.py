@@ -28,14 +28,14 @@ DEFAULT_CAR_ID = "e208d83305274b1daa97e4465cb57c8b"
 
 
 video_buffer = defaultdict(lambda: list())  # 여러개에 대해서 수신 가능하도록 변경
-video_started = set()
+
 def add_stream(car_id, data):
     stream_db[car_id].append(bytes(data))
     while len(stream_db[car_id]) > 300:
         stream_db[car_id].popleft()
 
-    for video in video_started:
-        video_buffer[video].append(data)
+    camera = Camera()
+    camera.one_tick(car_id, data)
     
 async def async_server():
     buffer = b""
@@ -87,10 +87,16 @@ def start_async_server():
     loop.run_until_complete(async_server())
 
 
+def camera_thread(s3, db):
+    camera = Camera()
+    camera.run(s3, db)
+
 @router.on_event("startup")
-async def router_startup_event():
+async def router_startup_event(db: Session = Depends(get_db), s3: S3 = Depends(get_S3), setting: config.Settings = Depends(config.get_settings)):
     t = threading.Thread(target=start_async_server)
     t.start()
+    t2 = threading.Thread(target=camera_thread, args=(s3, db))
+    t2.start()
 
 
 @router.websocket("/{user_id}/ws")
@@ -160,55 +166,106 @@ async def camera_control(data:MediaData, db: Session = Depends(get_db), s3: S3 =
     if cur_car is None:
         raise HTTPException(status_code=400, detail="잘못된 자동차 번호입니다.")
     key = generate_key()
+    camera = Camera()    
     if data.ctrl == CameraControl.getphoto:
-        key = key + ".png"
-        created_media = model.Media(key=key, type="img", car_id=data.car_id)
-        is_error = False
-        try:
-            s3.upload(data.car_id, key, stream_db[data.car_id][-1])
-        except:
-            is_error = True
-        if not is_error:
-            db.add(created_media)
-            db.commit()
-            print("upload_complete")
-            
+        camera.take_photo(data.car_id, stream_db[data.car_id][-1])
     elif data.ctrl == CameraControl.videostart:
-        video_started.add(data.car_id)
+        camera.start_video(data.car_id)
     elif data.ctrl == CameraControl.videostop:
-        if data.car_id in video_started:
-            video_started.remove(data.car_id)
-            video_list = video_buffer[data.car_id]
-            fourcc = cv2.VideoWriter_fourcc(*"X264")
-            fps = setting.fps
-            width = setting.width
-            height = setting.height
-            
-            label = f"./tmp/{data.car_id}_{key}.mp4"
-            out = cv2.VideoWriter(label, fourcc, fps, (width, height) )
-            for video in video_list:
-                video = cv2.imdecode(video, cv2.IMREAD_COLOR)
-                out.write(video)
-            out.release()
-            video_buffer.pop(data.car_id, None)
-            os.system(f"ffmpeg -i {f'{label}'} -vcodec libx264 {f'{label}_out.mp4'}")
-            
-            success = False
-            try:
-                s3.upload_video(f'{label}_out.mp4', data.car_id, key+".mp4")    
-                success = True
-            except:
-                raise HTTPException(status_code=500, detail="s3 에러")
-            finally:
-                os.remove(label)
-                os.remove(f'{label}_out.mp4')
+        camera.end_video(data.car_id)
 
-            if success:
-                created_media = model.Media(key=f'{key}.mp4', type="video", car_id=data.car_id)
-                db.add(created_media)
-                db.commit()
-                print("upload_complete")
+class Singleton(object):
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super(Singleton, cls).__new__(cls, *args, **kwargs)
+        return cls.instance
+class Camera(Singleton):
+    sema = threading.Semaphore(0)
+    lock = threading.Lock()
+    count = 0
+    video_started = set()
+    control = deque()
+    video_buffer = defaultdict()
+    
+    @classmethod
+    def take_photo(cls, car_id, img):
+        with cls.lock:
+            cls.control.append((CameraControl.getphoto, car_id, img))
+        cls.sema.release()
+        
+    @classmethod
+    def start_video(cls, car_id):
+        setting = config.get_settings()
+        with cls.lock:
+            cls.video_started.add(car_id)
+        fourcc = cv2.VideoWriter_fourcc(*"X264")
+        fps = setting.fps
+        width = setting.width
+        height = setting.height
+        key = generate_key()
+        label = f"./tmp/{car_id}_{key}.mp4"
+        out = cv2.VideoWriter(label, fourcc, fps, (width, height) )
+        cls.video_buffer[car_id] = (key,out)
+
+    @classmethod
+    def one_tick(cls, car_id, img):
+        if car_id in cls.video_started:
+            video = cv2.imdecode(img, cv2.IMREAD_COLOR)
+            cls.video_buffer[car_id][1].write(video)
+        
+
+    @classmethod
+    def end_video(cls, car_id):
+        if car_id not in cls.video_buffer:
+            return
+        ret = cls.video_buffer[car_id]
+        cls.control.append((CameraControl.videostop, car_id, ret[0], ret[1]))
+        del cls.video_buffer[car_id]
+    
+    @classmethod
+    def run(cls, s3: S3, db: Session):
+        while True:
+            cls.sema.acquire()
+            with cls.lock:
+                cur = cls.control.popleft()
+            if cur[0]==CameraControl.getphoto:
+                car_id = cur[1]
+                img = cur[2]
+                key = generate_key()        
+                key = key + ".png"
+                created_media = model.Media(key=key, type="img", car_id=car_id)
+                is_error = False
+                try:
+                    s3.upload(car_id, key, img)
+                except:
+                    is_error = True
+                if not is_error:
+                    db.add(created_media)
+                    db.commit()
+                    print("upload_complete")
+            
+            
+            if cur[0]==CameraControl.videostop:
+                car_id = cur[1]
+                key = cur[2]
+                out = cur[3]
+                out.release()
+                label = f"./tmp/{car_id}_{key}.mp4"
+                os.system(f"ffmpeg -i {f'{label}'} -vcodec libx264 {f'{label}_out.mp4'}")
                 
-            
+                success = False
+                try:
+                    s3.upload_video(f'{label}_out.mp4', car_id, key+".mp4")    
+                    success = True
+                except:
+                    raise HTTPException(status_code=500, detail="s3 에러")
+                finally:
+                    os.remove(label)
+                    os.remove(f'{label}_out.mp4')
 
-
+                if success:
+                    created_media = model.Media(key=f'{key}.mp4', type="video", car_id=car_id)
+                    db.add(created_media)
+                    db.commit()
+                    print("upload_complete")
+                    
