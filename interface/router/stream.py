@@ -7,10 +7,10 @@ import pickle
 from enum import Enum
 from pydantic import BaseModel
 from collections import defaultdict, deque
-from infrastructure.repository.base import get_db
+from infrastructure.repository.base import get_db, SessionLocal
 from infrastructure.repository.model import User
 from infrastructure.repository import schemas, model
-from infrastructure.repository.s3 import get_S3, S3
+from infrastructure.repository.s3 import get_S3, S3, make_s3
 
 from sqlalchemy.orm import Session
 import asyncio
@@ -34,7 +34,7 @@ def add_stream(car_id, data):
     while len(stream_db[car_id]) > 300:
         stream_db[car_id].popleft()
 
-    camera = Camera()
+    camera = Camera
     camera.one_tick(car_id, data)
     
 async def async_server():
@@ -88,11 +88,13 @@ def start_async_server():
 
 
 def camera_thread(s3, db):
-    camera = Camera()
+    camera = Camera
     camera.run(s3, db)
 
 @router.on_event("startup")
-async def router_startup_event(db: Session = Depends(get_db), s3: S3 = Depends(get_S3), setting: config.Settings = Depends(config.get_settings)):
+async def router_startup_event():
+    db = SessionLocal()
+    s3 = make_s3()
     t = threading.Thread(target=start_async_server)
     t.start()
     t2 = threading.Thread(target=camera_thread, args=(s3, db))
@@ -166,7 +168,7 @@ async def camera_control(data:MediaData, db: Session = Depends(get_db), s3: S3 =
     if cur_car is None:
         raise HTTPException(status_code=400, detail="잘못된 자동차 번호입니다.")
     key = generate_key()
-    camera = Camera()    
+    camera = Camera
     if data.ctrl == CameraControl.getphoto:
         camera.take_photo(data.car_id, stream_db[data.car_id][-1])
     elif data.ctrl == CameraControl.videostart:
@@ -185,7 +187,7 @@ class Camera(Singleton):
     count = 0
     video_started = set()
     control = deque()
-    video_buffer = defaultdict()
+    video_buffer = {}
     
     @classmethod
     def take_photo(cls, car_id, img):
@@ -196,9 +198,11 @@ class Camera(Singleton):
     @classmethod
     def start_video(cls, car_id):
         setting = config.get_settings()
+        if car_id in cls.video_started:
+            return
         with cls.lock:
             cls.video_started.add(car_id)
-        fourcc = cv2.VideoWriter_fourcc(*"X264")
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         fps = setting.fps
         width = setting.width
         height = setting.height
@@ -211,16 +215,20 @@ class Camera(Singleton):
     def one_tick(cls, car_id, img):
         if car_id in cls.video_started:
             video = cv2.imdecode(img, cv2.IMREAD_COLOR)
-            cls.video_buffer[car_id][1].write(video)
-        
+            if car_id in cls.video_buffer:
+                cls.video_buffer[car_id][1].write(video)
 
     @classmethod
     def end_video(cls, car_id):
         if car_id not in cls.video_buffer:
             return
         ret = cls.video_buffer[car_id]
-        cls.control.append((CameraControl.videostop, car_id, ret[0], ret[1]))
-        del cls.video_buffer[car_id]
+        cls.control.append((CameraControl.videostop, car_id, ret[0]))
+        with cls.lock:
+            cls.video_buffer[car_id][1].release()
+            del cls.video_buffer[car_id]
+            cls.video_started.remove(car_id)
+        cls.sema.release()
     
     @classmethod
     def run(cls, s3: S3, db: Session):
@@ -233,12 +241,14 @@ class Camera(Singleton):
                 img = cur[2]
                 key = generate_key()        
                 key = key + ".png"
+                print(car_id, key)
                 created_media = model.Media(key=key, type="img", car_id=car_id)
                 is_error = False
                 try:
                     s3.upload(car_id, key, img)
-                except:
+                except Exception as e:
                     is_error = True
+                    print(e)
                 if not is_error:
                     db.add(created_media)
                     db.commit()
@@ -248,8 +258,7 @@ class Camera(Singleton):
             if cur[0]==CameraControl.videostop:
                 car_id = cur[1]
                 key = cur[2]
-                out = cur[3]
-                out.release()
+                
                 label = f"./tmp/{car_id}_{key}.mp4"
                 os.system(f"ffmpeg -i {f'{label}'} -vcodec libx264 {f'{label}_out.mp4'}")
                 
@@ -268,4 +277,5 @@ class Camera(Singleton):
                     db.add(created_media)
                     db.commit()
                     print("upload_complete")
+                
                     

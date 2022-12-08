@@ -22,13 +22,18 @@ class S3:
             
     
 
-async def get_S3():
+def make_s3():
     setting = get_settings()
     s3 = client('s3',
                 aws_access_key_id = setting.aws_access_key_id,
                 aws_secret_access_key=setting.aws_secret_access_key,
     )
     upload = S3(s3=s3, bucket = setting.aws_bucket_name)
+    return upload
+
+
+async def get_S3():
+    upload = make_s3
     try:
         yield upload
     finally:
