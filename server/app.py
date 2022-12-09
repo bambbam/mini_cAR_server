@@ -19,6 +19,7 @@ origins = [
     "http://localhost:4000",
     "http://127.0.0.1",
     "http://127.0.0.1:4000",
+    "http://minicar_fe:4000" # for docker bridge network
 ]
 
 app.add_middleware(
@@ -28,7 +29,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 app.include_router(stream_router)
 app.include_router(car_router)
