@@ -46,7 +46,7 @@ async def async_server():
     while True:
         # iter 마다 하나의 datagram 수신
         recved, remote_addr = await stream.recv()
-        remote_addr = remote_addr[0] + ":" + remote_addr[1]
+        remote_addr = remote_addr[0] + ":" + str(remote_addr[1])
 
         # 받은 datagram이 car_id이면 패스
         if len(recved) == 32:

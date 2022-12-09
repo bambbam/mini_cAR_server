@@ -14,13 +14,18 @@ class Settings(BaseSettings):
     dev_db_url : str
     prod_db_url : str
 
+    # for streaming in start_async_server
     frame_rate : int = 30
+
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_bucket_name: str
+
+    # for camera in camera_thread
     fps: int
     width: int
     height: int
+    
     class Config:
         env_file = ".env"
 
