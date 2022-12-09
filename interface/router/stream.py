@@ -24,7 +24,7 @@ DEFAULT_CAR_ID = "e208d83305274b1daa97e4465cb57c8b"
 
 
 async def async_server():
-    buffer = b""
+    buffer = defaultdict(lambda: b"")
     len_size = struct.calcsize("<L")
 
     stream = await asyncio_dgram.bind(("0.0.0.0", 9999))
@@ -32,6 +32,7 @@ async def async_server():
     while True:
         # iter 마다 하나의 datagram 수신
         recved, remote_addr = await stream.recv()
+        remote_addr = remote_addr[0] + ":" + remote_addr[1]
 
         # 받은 datagram이 car_id이면 패스
         if len(recved) == 32:
@@ -39,11 +40,10 @@ async def async_server():
                 car_id = recved.decode("utf-8")
             except:
                 print("udp issue: car_id")
-                pass
             continue
         
         # 받은 datagram이 jpgImg fragment이면 buffer에 저장
-        buffer += recved[1:]
+        buffer[remote_addr] += recved[1:]
 
         try:
             num_of_fragments = struct.unpack("B", recved[0:1])[0]
@@ -54,14 +54,14 @@ async def async_server():
         # 받은 datagram이 마지막 fragment이면 그동안 buffer에 모은 bytes를 이미지로 바꾸고 buffer 비움
         if num_of_fragments == 1:
             try:
-                jpgImg = pickle.loads(buffer)
+                jpgImg = pickle.loads(buffer[remote_addr])
             except:
                 print("udp issue: jpgImg")
-                pass
+
             stream_db[car_id].append(bytes(jpgImg))
             while len(stream_db[car_id]) > 300:
                 stream_db[car_id].popleft()
-            buffer=b""
+            buffer[remote_addr]=b""
 
 
 def start_async_server():
@@ -99,24 +99,3 @@ async def stream_ws(websocket: WebSocket, user_id: str, db: Session = Depends(ge
     while True:
         await websocket.send_bytes(bytearray(stream_db[user.car_id][-1]))
         await asyncio.sleep(1 / setting.frame_rate)
-
-
-class CameraControl(Enum):
-    getphoto = 0
-    videostart = 1
-    videostop = 2
-
-class cameracontrol(BaseModel):
-    dir : CameraControl
-
-@router.post("/")
-async def camera_control(ctrl:cameracontrol):
-    if ctrl.dir == CameraControl.getphoto:
-        ## TODO
-        print("0")
-    elif ctrl.dir == CameraControl.videostart:
-        ## TODO
-        print("1")
-    elif ctrl.dir == CameraControl.videostop:
-        ## TODO
-        print("2")
