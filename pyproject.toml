@@ -27,6 +27,7 @@ boto3 = "^1.26.13"
 asyncio-dgram = "^2.1.2"
 uvloop = "^0.17.0"
 pyjwt = "^2.6.0"
+opencv-python = "^4.6.0"
 
 [tool.poetry.dev-dependencies]
 poethepoet = "^0.16.4"

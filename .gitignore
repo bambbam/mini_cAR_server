@@ -26,3 +26,4 @@ poetry.lock
 *~
 .*.sw?
 .env
+/tmp
